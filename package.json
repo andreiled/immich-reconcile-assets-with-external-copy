@@ -1,0 +1,15 @@
+{
+  "name": "immich-reconcile-assets-with-external-copy",
+  "version": "0.1.0",
+  "description": "Automation script for Immich to reconcile duplicates caused by copying original files directly from the internal library directory to an external library directory",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Andrey <andreiled@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@immich/sdk": "^1.138.1"
+  }
+}
