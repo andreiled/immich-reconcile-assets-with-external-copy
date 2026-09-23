@@ -3,19 +3,20 @@
 import crypto from 'crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
-import { getAssetDuplicates, init, deleteAssets } from "@immich/sdk";
+import { AssetResponseDto, getAssetDuplicates, init, deleteAssets } from "@immich/sdk";
+import { UserLibrariesConfig, loadConfig } from './config.js';
 
 const IMMICH_STORED_CHECKSUM_OPTS = Object.freeze({alg: 'sha1', encoding: 'base64'});
 
-const usersWithLibraries = JSON.parse(await fs.readFile("/user_libraries", { encoding: 'utf8' }));
+const usersWithLibraries = await loadConfig();
 
 // Process the array elements sequentially rather than in parallel.
 usersWithLibraries.reduce(
-    (acc, curr) => acc.then(async () => fixDuplicates(curr)),
-    Promise.resolve(null)
+    (acc: Promise<void>, curr: UserLibrariesConfig) => acc.then(async () => fixDuplicates(curr)),
+    Promise.resolve<void>(undefined)
 )
 
-async function fixDuplicates(userParams) {
+async function fixDuplicates(userParams: UserLibrariesConfig): Promise<void> {
     const { internalLibrary, externalLibrary, apiKey } = userParams;
     console.info(`Checking ${internalLibrary} for duplicates of assets in ${externalLibrary} ...`);
 
@@ -65,30 +66,38 @@ will delete the asset (${internalUploadedAsset.id}).`);
     }))).filter(it => !!it);
 }
 
-async function findExactContentDuplicates(asset, candidates) {
+async function findExactContentDuplicates(asset: AssetResponseDto, candidates: AssetResponseDto[]): Promise<AssetResponseDto[]> {
     const expectedChecksum = asset.checksum;
-    return (await Promise.all(candidates.map(async (candidate) => [candidate, await checksum(candidate.originalPath)])))
+
+    const candidatesWithChecksums = await Promise.all(
+        candidates.map(async (candidate) => [candidate, await checksum(candidate.originalPath)])
+    ) as [AssetResponseDto, string][];
+
+    return candidatesWithChecksums
         .filter(([candidate, checksum]) => checksum === expectedChecksum)
         .map(([candidate, checksum]) => candidate);
 }
 
-async function checksum(file, options = IMMICH_STORED_CHECKSUM_OPTS) {
+async function checksum(
+    file: string,
+    options: {alg: string, encoding: BufferEncoding} = IMMICH_STORED_CHECKSUM_OPTS
+): Promise<string> {
     const { alg, encoding } = options;
 
     return new Promise((resolve, reject) => {
         const digester = crypto.createHash(alg);
         const rs = createReadStream(file);
 
-        rs.on('data', (chunk) => digester.update(chunk));
+        rs.on('data', (chunk: Buffer) => digester.update(chunk));
         rs.on('error', reject);
         rs.on('end', () => resolve(digester.digest(encoding)));
     });
 }
 
-async function removeFileSafe(path) {
+async function removeFileSafe(path: string): Promise<void> {
     try {
         await fs.unlink(path)
-    } catch (error) {
+    } catch (error: any) {
         if (error.code === 'ENOENT') {
             console.warn(`${path} is already removed`);
         }
